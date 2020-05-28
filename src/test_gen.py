@@ -200,5 +200,3 @@ class SentenceGenerator(Solver):
             sentences += batch
         return sentences
 
-    def generate_sentence(self):
-        pass
