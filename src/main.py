@@ -1,6 +1,7 @@
 import argparse
 from test_gen import SentenceGenerator
 
+
 def parse():
     parser = argparse.ArgumentParser(description="tree transformer")
     parser.add_argument('-no_cuda', action='store_true', help="Don't use GPUs.")
