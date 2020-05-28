@@ -1,11 +1,12 @@
 import math
-import numpy as np
+import os
 import sys
 import time
+
+import numpy as np
 import torch
 
-# insert at 1, 0 is the script path (or '' in REPL)
-sys.path.insert(1, '/home/andres/repositories/Tree-Transformer')
+sys.path.insert(1, '/home/andres/repositories/Tree-Transformer')  # insert at 1 (0 is the script path (or '' in REPL))
 from solver import Solver
 
 CLS = '[CLS]'
@@ -20,6 +21,10 @@ class SentenceGenerator(Solver):
         self.mask_id = self.data_utils.tokenizer.convert_tokens_to_ids([MASK])[0]
         self.sep_id = self.data_utils.tokenizer.convert_tokens_to_ids([SEP])[0]
         self.cls_id = self.data_utils.tokenizer.convert_tokens_to_ids([CLS])[0]
+
+        path = os.path.join(self.model_dir, 'model.pth')
+        self.model.load_state_dict(torch.load(path)['state_dict'])
+        self.model.eval()
 
     def tokenize_batch(self, batch):
         return [self.data_utils.tokenizer.convert_tokens_to_ids(sent) for sent in batch]
@@ -101,13 +106,15 @@ class SentenceGenerator(Solver):
         """
         seed_len = len(seed_text)
         batch = self.get_init_text(seed_text, max_len, batch_size)
+        inp_mask = []
 
         for ii in range(max_iter):
             kk = np.random.randint(0, max_len)
             for jj in range(batch_size):
                 batch[jj][seed_len + kk] = self.mask_id
             inp = torch.tensor(batch).cuda() if cuda else torch.tensor(batch)
-            out = model(inp)[0]
+            inp_mask.append(np.expand_dims(inp != self.sep_id, -2).astype(np.int32))
+            out, break_probs = self.model(inp, inp_mask)
             topk = top_k if (ii >= burnin) else 0
             idxs = self.generate_step(out, gen_idx=seed_len + kk, top_k=topk, temperature=temperature,
                                       sample=(ii < burnin))
@@ -127,10 +134,12 @@ class SentenceGenerator(Solver):
         """ Generate for all positions at each time step """
         seed_len = len(seed_text)
         batch = self.get_init_text(seed_text, max_len, batch_size)
+        inp_mask = []
 
         for ii in range(max_iter):
             inp = torch.tensor(batch).cuda() if cuda else torch.tensor(batch)
-            out = model(inp)[0]
+            inp_mask.append(np.expand_dims(inp != self.sep_id, -2).astype(np.int32))
+            out, break_probs = self.model(inp, inp_mask)
             for kk in range(max_len):
                 idxs = self.generate_step(out, gen_idx=seed_len + kk, top_k=top_k, temperature=temperature,
                                           sample=sample)
@@ -147,11 +156,13 @@ class SentenceGenerator(Solver):
         """ Generate one word at a time, in L->R order """
         seed_len = len(seed_text)
         batch = self.get_init_text(seed_text, max_len, batch_size)
+        inp_mask = []
 
         for ii in range(max_len):
             inp = [sent[:seed_len + ii + leed_out_len] + [self.sep_id] for sent in batch]
             inp = torch.tensor(batch).cuda() if cuda else torch.tensor(batch)
-            out = model(inp)[0]
+            inp_mask.append(np.expand_dims(inp != self.sep_id, -2).astype(np.int32))
+            out, break_probs = self.model(inp, inp_mask)
             idxs = self.generate_step(out, gen_idx=seed_len + ii, top_k=top_k, temperature=temperature, sample=sample)
             for jj in range(batch_size):
                 batch[jj][seed_len + ii] = idxs[jj]
