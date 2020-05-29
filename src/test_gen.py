@@ -8,6 +8,7 @@ import torch
 
 sys.path.insert(1, '/home/andres/repositories/Tree-Transformer')  # insert at 1 (0 is the script path (or '' in REPL))
 from solver import Solver
+from utils import cc
 
 CLS = '[CLS]'
 SEP = '[SEP]'
@@ -112,9 +113,9 @@ class SentenceGenerator(Solver):
             kk = np.random.randint(0, max_len)
             for jj in range(batch_size):
                 batch[jj][seed_len + kk] = self.mask_id
-            inp = torch.tensor(batch).cuda() if cuda else torch.tensor(batch)
+            inp = cc(batch, self.no_cuda)
             inp_mask.append(np.expand_dims(inp != self.sep_id, -2).astype(np.int32))
-            out, break_probs = self.model(inp, inp_mask)
+            out, break_probs = self.model(inp, cc(inp_mask, self.no_cuda)[0])
             topk = top_k if (ii >= burnin) else 0
             idxs = self.generate_step(out, gen_idx=seed_len + kk, top_k=topk, temperature=temperature,
                                       sample=(ii < burnin))
@@ -137,9 +138,9 @@ class SentenceGenerator(Solver):
         inp_mask = []
 
         for ii in range(max_iter):
-            inp = torch.tensor(batch).cuda() if cuda else torch.tensor(batch)
+            inp = cc(batch, self.no_cuda)
             inp_mask.append(np.expand_dims(inp != self.sep_id, -2).astype(np.int32))
-            out, break_probs = self.model(inp, inp_mask)
+            out, break_probs = self.model(inp, cc(inp_mask, self.no_cuda)[0])
             for kk in range(max_len):
                 idxs = self.generate_step(out, gen_idx=seed_len + kk, top_k=top_k, temperature=temperature,
                                           sample=sample)
@@ -160,9 +161,9 @@ class SentenceGenerator(Solver):
 
         for ii in range(max_len):
             inp = [sent[:seed_len + ii + leed_out_len] + [self.sep_id] for sent in batch]
-            inp = torch.tensor(batch).cuda() if cuda else torch.tensor(batch)
+            inp = cc(batch, self.no_cuda)
             inp_mask.append(np.expand_dims(inp != self.sep_id, -2).astype(np.int32))
-            out, break_probs = self.model(inp, inp_mask)
+            out, break_probs = self.model(inp, cc(inp_mask, self.no_cuda)[0])
             idxs = self.generate_step(out, gen_idx=seed_len + ii, top_k=top_k, temperature=temperature, sample=sample)
             for jj in range(batch_size):
                 batch[jj][seed_len + ii] = idxs[jj]
@@ -172,7 +173,7 @@ class SentenceGenerator(Solver):
     def generate(self, n_samples, seed_text=CLS, batch_size=10, max_len=25,
                  generation_mode="parallel-sequential",
                  sample=True, top_k=100, temperature=1.0, burnin=200, max_iter=500,
-                 cuda=False, print_every=1):
+                 leed_out_len=15, print_every=1):
         # main generation function to call
         sentences = []
         n_batches = math.ceil(n_samples / batch_size)
@@ -182,16 +183,16 @@ class SentenceGenerator(Solver):
                 batch = self.parallel_sequential_generation(seed_text, batch_size=batch_size, max_len=max_len,
                                                             top_k=top_k,
                                                             temperature=temperature, burnin=burnin, max_iter=max_iter,
-                                                            cuda=cuda, verbose=False)
+                                                            cuda=not self.no_cuda, verbose=False)
             elif generation_mode == "sequential":
                 batch = self.sequential_generation(seed_text, batch_size=batch_size, max_len=max_len, top_k=top_k,
                                                    temperature=temperature, leed_out_len=leed_out_len, sample=sample,
-                                                   cuda=cuda)
+                                                   cuda=not self.no_cuda)
             elif generation_mode == "parallel":
                 batch = self.parallel_generation(seed_text, batch_size=batch_size,
                                                  max_len=max_len, top_k=top_k, temperature=temperature,
                                                  sample=sample, max_iter=max_iter,
-                                                 cuda=cuda, verbose=False)
+                                                 cuda=not self.no_cuda, verbose=False)
 
             if (batch_n + 1) % print_every == 0:
                 print("Finished batch %d in %.3fs" % (batch_n + 1, time.time() - start_time))

@@ -42,5 +42,7 @@ if __name__ == '__main__':
     bert_sents = sent_gen.generate(n_samples, seed_text=seed_text, batch_size=batch_size, max_len=max_len,
                                    generation_mode=generation_mode,
                                    sample=sample, top_k=top_k, temperature=temperature, burnin=burnin,
-                                   max_iter=max_iter,
-                                   cuda=cuda)
+                                   max_iter=max_iter, leed_out_len=leed_out_len)
+
+    for sent in bert_sents:
+        sent_gen.printer(sent, should_detokenize=True)
