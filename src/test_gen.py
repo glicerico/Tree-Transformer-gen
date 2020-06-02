@@ -24,7 +24,9 @@ class SentenceGenerator(Solver):
         self.cls_id = self.data_utils.tokenizer.convert_tokens_to_ids([CLS])[0]
 
         path = os.path.join(self.model_dir, 'model.pth')
-        self.model.load_state_dict(torch.load(path)['state_dict'])
+        device = torch.device("cpu" if self.no_cuda else "cuda:0")
+        self.model.load_state_dict(torch.load(path, map_location=device)['state_dict'])
+        print(f"Loaded model from {path}!")
         self.model.eval()
 
     def tokenize_batch(self, batch):
