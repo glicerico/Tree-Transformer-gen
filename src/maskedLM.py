@@ -6,7 +6,7 @@ import torch
 
 from test_gen import SentenceGenerator
 sys.path.insert(1, '/home/andres/repositories/Tree-Transformer')  # insert at 1 (0 is the script path (or '' in REPL))
-from utils import cc
+from utils import cc, data_utils
 
 
 def parse():
@@ -33,7 +33,7 @@ def print_top_predictions(probs, tokenizer, k=5):
     probs = probs.detach().numpy()
     top_indexes = np.argpartition(probs, -k)[-k:]
     sorted_indexes = top_indexes[np.argsort(-probs[top_indexes])]
-    top_tokens = tokenizer.convert_ids_to_tokens(sorted_indexes)
+    top_tokens = data_utils.id2sent(sorted_indexes)
     print(f"Ordered top predicted tokens: {top_tokens}")
     print(f"Ordered top predicted values: {probs[sorted_indexes]}")
 
@@ -41,22 +41,25 @@ def print_top_predictions(probs, tokenizer, k=5):
 if __name__ == '__main__':
     args = parse()
     sent_gen = SentenceGenerator(args)
+    data_utils = data_utils(args)
 
-    sent = "This is a [MASK] ."
-    mask_pos = 4
-    tok_sent = ['[CLS]']
-    tok_sent.extend(sent_gen.data_utils.tokenizer.tokenize(sent))
-    tok_sent.append('[SEP]')
-    inp = cc([sent_gen.data_utils.tokenizer.encode(sent, add_special_tokens=True)], args.no_cuda)
-    mask_sent = np.expand_dims(inp != 102, -2).astype(np.int32)
-    print(tok_sent)
+    sent = ["there is no [MASK] in our products now"]
+    vecs = [data_utils.text2id(txt, 10) for txt in sent]
+    # tok_sent = ['[CLS]']
+    # tok_sent.extend(sent_gen.data_utils.tokenizer.tokenize(sent))
+    # tok_sent.append('[SEP]')
+    # inp = cc([sent_gen.data_utils.tokenizer.encode(sent, add_special_tokens=True)], args.no_cuda)
+    inp = cc(vecs, args.no_cuda)
+    mask_sent = np.expand_dims(inp != 0, -2).astype(np.int32)
+    print(vecs)
     print(inp)
     print(mask_sent)
 
     predictions, break_probs = sent_gen.model.forward(inp.long(), cc(mask_sent, sent_gen.no_cuda)[0])
     sm = torch.nn.Softmax(dim=0)  # Used to convert logits to probs
     for pos in range(1, inp.shape[1]):
-        print(f"Prediction for word: {tok_sent[pos]}")
+        # print(f"Prediction for word: {tok_sent[pos]}")
+        print(f"Prediction for word: {vecs[0][pos]}")
         probs = sm(predictions[0, pos])
         print_top_predictions(probs, sent_gen.data_utils.tokenizer)
 
