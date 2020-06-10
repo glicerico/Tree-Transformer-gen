@@ -29,7 +29,8 @@ if __name__ == '__main__':
     n_samples = 5
     batch_size = 5
     max_len = 20
-    top_k = 100
+    # top_k = 100
+    top_k = None
     temperature = 1.0
     leed_out_len = 5  # max_len
     burnin = 250
