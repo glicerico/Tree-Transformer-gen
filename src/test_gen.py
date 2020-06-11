@@ -108,7 +108,7 @@ class SentenceGenerator(Solver):
         args:
             - burnin: during burn-in period, sample from full distribution; afterwards take argmax
         """
-        seed_len = len(seed_text)
+        seed_len = len(seed_text) + 1 # +1 to account for CLS
         batch = self.get_init_text(seed_text, max_len, batch_size)
         inp_mask = []
 
@@ -136,7 +136,7 @@ class SentenceGenerator(Solver):
                             sample=True,
                             print_every=10, verbose=True):
         """ Generate for all positions at each time step """
-        seed_len = len(seed_text)
+        seed_len = len(seed_text) + 1 # +1 to account for CLS
         batch = self.get_init_text(seed_text, max_len, batch_size)
         inp_mask = []
 
@@ -158,7 +158,7 @@ class SentenceGenerator(Solver):
     def sequential_generation(self, seed_text, batch_size=10, max_len=15, leed_out_len=15,
                               top_k=0, temperature=None, sample=True):
         """ Generate one word at a time, in L->R order """
-        seed_len = len(seed_text)
+        seed_len = len(seed_text) + 1  # +1 to account for CLS
         batch = self.get_init_text(seed_text, max_len, batch_size)
 
         for ii in range(max_len - seed_len):

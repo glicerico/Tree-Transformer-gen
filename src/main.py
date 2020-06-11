@@ -28,7 +28,7 @@ if __name__ == '__main__':
 
     n_samples = 5
     batch_size = 5
-    max_len = 10
+    max_len = 15
     # top_k = 100
     top_k = 10
     temperature = 1.0
