@@ -161,7 +161,7 @@ class SentenceGenerator(Solver):
         seed_len = len(seed_text)
         batch = self.get_init_text(seed_text, max_len, batch_size)
 
-        for ii in range(max_len):
+        for ii in range(max_len - seed_len):
             # inp = [sent[:seed_len + ii + leed_out_len] + [self.sep_id] for sent in batch]
             inp = cc(batch, self.no_cuda)
             inp_mask = [np.expand_dims(i != self.sep_id, -2).astype(np.int32) for i in inp]
@@ -171,6 +171,7 @@ class SentenceGenerator(Solver):
             for jj in range(batch_size):
                 batch[jj][seed_len + ii] = idxs[jj]
 
+        # return self.untokenize_batch(batch)
         return self.untokenize_batch(batch)
 
     def generate(self, n_samples, seed_text=CLS, batch_size=10, max_len=25,

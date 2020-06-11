@@ -45,4 +45,4 @@ if __name__ == '__main__':
                                    max_iter=max_iter, leed_out_len=leed_out_len)
 
     for sent in bert_sents:
-        sent_gen.printer(sent, should_detokenize=True)
+        sent_gen.printer(sent.split(), should_detokenize=True)
