@@ -11,7 +11,7 @@ from solver import Solver
 from utils import cc
 
 CLS = '[CLS]'
-SEP = '[SEP]'
+SEP = '[PAD]'
 MASK = '[MASK]'
 
 
@@ -19,19 +19,21 @@ class SentenceGenerator(Solver):
     def __init__(self, args):
         super(SentenceGenerator, self).__init__(args)
 
-        self.mask_id = self.data_utils.tokenizer.convert_tokens_to_ids([MASK])[0]
-        self.sep_id = self.data_utils.tokenizer.convert_tokens_to_ids([SEP])[0]
-        self.cls_id = self.data_utils.tokenizer.convert_tokens_to_ids([CLS])[0]
+        self.mask_id = self.data_utils.new_vocab[MASK]
+        self.sep_id = self.data_utils.new_vocab[SEP]
+        self.cls_id = self.data_utils.new_vocab[CLS]
 
         path = os.path.join(self.model_dir, 'model.pth')
-        self.model.load_state_dict(torch.load(path)['state_dict'])
+        device = torch.device("cpu" if self.no_cuda else "cuda:0")
+        self.model.load_state_dict(torch.load(path, map_location=device)['state_dict'])
+        print(f"Loaded model from {path}!")
         self.model.eval()
 
-    def tokenize_batch(self, batch):
-        return [self.data_utils.tokenizer.convert_tokens_to_ids(sent) for sent in batch]
+    def tokenize_batch(self, batch, max_len):
+        return [self.data_utils.text2id(" ".join(sent), seq_length=max_len + 2) for sent in batch]
 
     def untokenize_batch(self, batch):
-        return [self.data_utils.tokenizer.convert_ids_to_tokens(sent) for sent in batch]
+        return [self.data_utils.id2sent(sent) for sent in batch]
 
     @staticmethod
     def detokenize(sent):
@@ -70,12 +72,13 @@ class SentenceGenerator(Solver):
 
     def get_init_text(self, seed_text, max_len, batch_size=1, rand_init=False):
         """ Get initial sentence by padding seed_text with either masks or random words to max_len """
-        batch = [seed_text + [MASK] * max_len + [SEP] for _ in range(batch_size)]
+        batch = [seed_text + [MASK] * (max_len - len(seed_text)) + [SEP] for _ in range(batch_size)]
         # if rand_init:
         #    for ii in range(max_len):
         #        init_idx[seed_len+ii] = np.random.randint(0, len(tokenizer.vocab))
 
-        return self.tokenize_batch(batch)
+        #return self.tokenize_batch(batch)
+        return self.tokenize_batch(batch, max_len=max_len)
 
     def printer(self, sent, should_detokenize=True):
         if should_detokenize:
@@ -99,23 +102,23 @@ class SentenceGenerator(Solver):
     def parallel_sequential_generation(self, seed_text, batch_size=10, max_len=15, top_k=0, temperature=None,
                                        max_iter=300,
                                        burnin=200,
-                                       cuda=False, print_every=10, verbose=True):
+                                       print_every=10, verbose=True):
         """ Generate for one random position at a timestep
 
         args:
             - burnin: during burn-in period, sample from full distribution; afterwards take argmax
         """
-        seed_len = len(seed_text)
+        seed_len = len(seed_text) + 1 # +1 to account for CLS
         batch = self.get_init_text(seed_text, max_len, batch_size)
         inp_mask = []
 
         for ii in range(max_iter):
-            kk = np.random.randint(0, max_len)
+            kk = np.random.randint(0, max_len - seed_len)
             for jj in range(batch_size):
                 batch[jj][seed_len + kk] = self.mask_id
             inp = cc(batch, self.no_cuda)
             inp_mask.append(np.expand_dims(inp != self.sep_id, -2).astype(np.int32))
-            out, break_probs = self.model(inp, cc(inp_mask, self.no_cuda)[0])
+            out, break_probs = self.model(inp.long(), cc(inp_mask, self.no_cuda)[0])
             topk = top_k if (ii >= burnin) else 0
             idxs = self.generate_step(out, gen_idx=seed_len + kk, top_k=topk, temperature=temperature,
                                       sample=(ii < burnin))
@@ -123,7 +126,7 @@ class SentenceGenerator(Solver):
                 batch[jj][seed_len + kk] = idxs[jj]
 
             if verbose and np.mod(ii + 1, print_every) == 0:
-                for_print = self.data_utils.tokenizer.convert_ids_to_tokens(batch[0])
+                for_print = self.data_utils.id2sent(batch[0]).split()
                 for_print = for_print[:seed_len + kk + 1] + ['(*)'] + for_print[seed_len + kk + 1:]
                 print("iter", ii + 1, " ".join(for_print))
 
@@ -131,43 +134,44 @@ class SentenceGenerator(Solver):
 
     def parallel_generation(self, seed_text, batch_size=10, max_len=15, top_k=0, temperature=None, max_iter=300,
                             sample=True,
-                            cuda=False, print_every=10, verbose=True):
+                            print_every=10, verbose=True):
         """ Generate for all positions at each time step """
-        seed_len = len(seed_text)
+        seed_len = len(seed_text) + 1 # +1 to account for CLS
         batch = self.get_init_text(seed_text, max_len, batch_size)
         inp_mask = []
 
         for ii in range(max_iter):
             inp = cc(batch, self.no_cuda)
             inp_mask.append(np.expand_dims(inp != self.sep_id, -2).astype(np.int32))
-            out, break_probs = self.model(inp, cc(inp_mask, self.no_cuda)[0])
-            for kk in range(max_len):
+            out, break_probs = self.model(inp.long(), cc(inp_mask, self.no_cuda)[0])
+            for kk in range(max_len - seed_len):
                 idxs = self.generate_step(out, gen_idx=seed_len + kk, top_k=top_k, temperature=temperature,
                                           sample=sample)
                 for jj in range(batch_size):
                     batch[jj][seed_len + kk] = idxs[jj]
 
             if verbose and np.mod(ii, print_every) == 0:
-                print("iter", ii + 1, " ".join(self.data_utils.tokenizer.convert_ids_to_tokens(batch[0])))
+                print("iter", ii + 1, self.data_utils.id2sent(batch[0]))
 
         return self.untokenize_batch(batch)
 
     def sequential_generation(self, seed_text, batch_size=10, max_len=15, leed_out_len=15,
-                              top_k=0, temperature=None, sample=True, cuda=False):
+                              top_k=0, temperature=None, sample=True):
         """ Generate one word at a time, in L->R order """
-        seed_len = len(seed_text)
+        seed_len = len(seed_text) + 1  # +1 to account for CLS
         batch = self.get_init_text(seed_text, max_len, batch_size)
-        inp_mask = []
 
-        for ii in range(max_len):
-            inp = [sent[:seed_len + ii + leed_out_len] + [self.sep_id] for sent in batch]
+        for ii in range(max_len - seed_len):
+            # inp = [sent[:seed_len + ii + leed_out_len] + [self.sep_id] for sent in batch]
             inp = cc(batch, self.no_cuda)
-            inp_mask.append(np.expand_dims(inp != self.sep_id, -2).astype(np.int32))
-            out, break_probs = self.model(inp, cc(inp_mask, self.no_cuda)[0])
+            inp_mask = [np.expand_dims(i != self.sep_id, -2).astype(np.int32) for i in inp]
+            test = cc(inp_mask, self.no_cuda)
+            out, break_probs = self.model(inp.long(), cc(inp_mask, self.no_cuda)[0])
             idxs = self.generate_step(out, gen_idx=seed_len + ii, top_k=top_k, temperature=temperature, sample=sample)
             for jj in range(batch_size):
                 batch[jj][seed_len + ii] = idxs[jj]
 
+        # return self.untokenize_batch(batch)
         return self.untokenize_batch(batch)
 
     def generate(self, n_samples, seed_text=CLS, batch_size=10, max_len=25,
@@ -183,16 +187,15 @@ class SentenceGenerator(Solver):
                 batch = self.parallel_sequential_generation(seed_text, batch_size=batch_size, max_len=max_len,
                                                             top_k=top_k,
                                                             temperature=temperature, burnin=burnin, max_iter=max_iter,
-                                                            cuda=not self.no_cuda, verbose=False)
+                                                            verbose=False)
             elif generation_mode == "sequential":
                 batch = self.sequential_generation(seed_text, batch_size=batch_size, max_len=max_len, top_k=top_k,
-                                                   temperature=temperature, leed_out_len=leed_out_len, sample=sample,
-                                                   cuda=not self.no_cuda)
+                                                   temperature=temperature, leed_out_len=leed_out_len, sample=sample)
             elif generation_mode == "parallel":
                 batch = self.parallel_generation(seed_text, batch_size=batch_size,
                                                  max_len=max_len, top_k=top_k, temperature=temperature,
                                                  sample=sample, max_iter=max_iter,
-                                                 cuda=not self.no_cuda, verbose=False)
+                                                 verbose=False)
 
             if (batch_n + 1) % print_every == 0:
                 print("Finished batch %d in %.3fs" % (batch_n + 1, time.time() - start_time))

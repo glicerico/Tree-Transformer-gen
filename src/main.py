@@ -28,8 +28,9 @@ if __name__ == '__main__':
 
     n_samples = 5
     batch_size = 5
-    max_len = 20
-    top_k = 100
+    max_len = 15
+    # top_k = 100
+    top_k = 10
     temperature = 1.0
     leed_out_len = 5  # max_len
     burnin = 250
@@ -37,11 +38,11 @@ if __name__ == '__main__':
     max_iter = 500
 
     # Choose the prefix context
-    seed_text = "[CLS]".split()
+    seed_text = "The plant".split()
     bert_sents = sent_gen.generate(n_samples, seed_text=seed_text, batch_size=batch_size, max_len=max_len,
                                    generation_mode=args.mode,
                                    sample=sample, top_k=top_k, temperature=temperature, burnin=burnin,
                                    max_iter=max_iter, leed_out_len=leed_out_len)
 
     for sent in bert_sents:
-        sent_gen.printer(sent, should_detokenize=True)
+        sent_gen.printer(sent.split(), should_detokenize=True)
