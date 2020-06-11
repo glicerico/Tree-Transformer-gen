@@ -38,7 +38,7 @@ if __name__ == '__main__':
     max_iter = 500
 
     # Choose the prefix context
-    seed_text = "My name is".split()
+    seed_text = "The plant".split()
     bert_sents = sent_gen.generate(n_samples, seed_text=seed_text, batch_size=batch_size, max_len=max_len,
                                    generation_mode=args.mode,
                                    sample=sample, top_k=top_k, temperature=temperature, burnin=burnin,

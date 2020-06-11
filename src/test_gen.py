@@ -113,12 +113,12 @@ class SentenceGenerator(Solver):
         inp_mask = []
 
         for ii in range(max_iter):
-            kk = np.random.randint(0, max_len)
+            kk = np.random.randint(0, max_len - seed_len)
             for jj in range(batch_size):
                 batch[jj][seed_len + kk] = self.mask_id
             inp = cc(batch, self.no_cuda)
             inp_mask.append(np.expand_dims(inp != self.sep_id, -2).astype(np.int32))
-            out, break_probs = self.model(inp, cc(inp_mask, self.no_cuda)[0])
+            out, break_probs = self.model(inp.long(), cc(inp_mask, self.no_cuda)[0])
             topk = top_k if (ii >= burnin) else 0
             idxs = self.generate_step(out, gen_idx=seed_len + kk, top_k=topk, temperature=temperature,
                                       sample=(ii < burnin))
@@ -143,8 +143,8 @@ class SentenceGenerator(Solver):
         for ii in range(max_iter):
             inp = cc(batch, self.no_cuda)
             inp_mask.append(np.expand_dims(inp != self.sep_id, -2).astype(np.int32))
-            out, break_probs = self.model(inp, cc(inp_mask, self.no_cuda)[0])
-            for kk in range(max_len):
+            out, break_probs = self.model(inp.long(), cc(inp_mask, self.no_cuda)[0])
+            for kk in range(max_len - seed_len):
                 idxs = self.generate_step(out, gen_idx=seed_len + kk, top_k=top_k, temperature=temperature,
                                           sample=sample)
                 for jj in range(batch_size):
