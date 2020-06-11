@@ -58,10 +58,11 @@ if __name__ == '__main__':
     predictions, break_probs = sent_gen.model.forward(inp.long(), cc(mask_sent, sent_gen.no_cuda)[0])
     sm = torch.nn.Softmax(dim=0)  # Used to convert logits to probs
     for pos in range(1, inp.shape[1]):
-        # print(f"Prediction for word: {tok_sent[pos]}")
-        print(f"Prediction for word: {vecs[0][pos]}")
-        probs = sm(predictions[0, pos])
-        print_top_predictions(probs, sent_gen.data_utils.tokenizer)
+        if vecs[0][pos] != 0:
+            # print(f"Prediction for word: {tok_sent[pos]}")
+            print(f"Prediction for word: {data_utils.index2word[vecs[0][pos]]}")
+            probs = sm(predictions[0, pos])
+            print_top_predictions(probs, sent_gen.data_utils.tokenizer)
 
     # for sent in bert_sents:
     #     sent_gen.printer(sent, should_detokenize=True)
